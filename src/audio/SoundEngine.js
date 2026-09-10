@@ -4,8 +4,13 @@ export class SoundEngine {
     this.masterGain = null;
     this.ambientDroneGain = null;
     this.droneOscs = [];
+    this.analyser = null;
+    this.freqData = null;
     this.isEnabled = false;
     this.volume = 0.7;
+
+    // AI Voice System
+    this.voice = new CyberneticVoice();
 
     this.toggleBtn = document.getElementById('audio-toggle');
     this.label = document.getElementById('audio-btn-label');
@@ -24,9 +29,18 @@ export class SoundEngine {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioContext();
 
+      // Master Gain
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
+
+      // Real-time FFT Frequency Analyser
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 64; // 32 frequency bins
+      this.analyser.smoothingTimeConstant = 0.8;
+      this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+
+      this.masterGain.connect(this.analyser);
+      this.analyser.connect(this.ctx.destination);
     }
 
     if (this.ctx.state === 'suspended') {
@@ -43,6 +57,7 @@ export class SoundEngine {
       if (this.toggleBtn) this.toggleBtn.classList.add('active');
       if (this.label) this.label.textContent = 'AUDIO: LIVE';
       this.playWarpTone();
+      this.voice.speak('Spatial audio initialized. Quantum frequencies active.');
     } else {
       this.stopDrone();
       if (this.toggleBtn) this.toggleBtn.classList.remove('active');
@@ -64,7 +79,6 @@ export class SoundEngine {
     this.ambientDroneGain.gain.setValueAtTime(0.001, this.ctx.currentTime);
     this.ambientDroneGain.gain.exponentialRampToValueAtTime(0.18, this.ctx.currentTime + 1.5);
 
-    // Lowpass filter for warm cosmic ambient
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(280, this.ctx.currentTime);
@@ -72,15 +86,12 @@ export class SoundEngine {
     this.ambientDroneGain.connect(filter);
     filter.connect(this.masterGain);
 
-    // Fundamental + sub + fifth chord
-    const freqs = [55, 110, 164.81]; // A1, A2, E3
+    const freqs = [55, 110, 164.81];
 
     this.droneOscs = freqs.map((freq, i) => {
       const osc = this.ctx.createOscillator();
       osc.type = i === 0 ? 'sawtooth' : 'sine';
       osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
-      // Subtle detune for phasing
       osc.detune.setValueAtTime((i - 1) * 3, this.ctx.currentTime);
       osc.connect(this.ambientDroneGain);
       osc.start();
@@ -105,7 +116,6 @@ export class SoundEngine {
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    // Gentle high resonant chime
     osc.frequency.setValueAtTime(880, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1320, this.ctx.currentTime + 0.12);
 
@@ -163,5 +173,84 @@ export class SoundEngine {
 
     osc.start();
     osc.stop(this.ctx.currentTime + 0.45);
+  }
+
+  // Returns normalized audio frequency bands: { bass: 0..1, mid: 0..1, treble: 0..1, average: 0..1 }
+  getFrequencyBands() {
+    if (!this.analyser || !this.freqData || !this.isEnabled) {
+      return { bass: 0, mid: 0, treble: 0, average: 0 };
+    }
+
+    this.analyser.getByteFrequencyData(this.freqData);
+
+    let bassSum = 0;
+    let midSum = 0;
+    let trebleSum = 0;
+    const len = this.freqData.length;
+
+    // First 4 bins = Bass (0 - 250Hz approx)
+    for (let i = 0; i < 4; i++) bassSum += this.freqData[i];
+    // Mid bins (4 - 16)
+    for (let i = 4; i < 16; i++) midSum += this.freqData[i];
+    // Treble bins (16 - 32)
+    for (let i = 16; i < len; i++) trebleSum += this.freqData[i];
+
+    const bass = (bassSum / (4 * 255));
+    const mid = (midSum / (12 * 255));
+    const treble = (trebleSum / ((len - 16) * 255));
+    const average = (bass + mid + treble) / 3;
+
+    return { bass, mid, treble, average };
+  }
+}
+
+/**
+ * Cybernetic Robotic Voice Synthesizer
+ */
+export class CyberneticVoice {
+  constructor() {
+    this.synth = window.speechSynthesis || null;
+    this.isEnabled = true;
+    this.isSpeaking = false;
+    this.pitch = 0.85; // slightly lower robotic timbre
+    this.rate = 1.05;  // crisp cadence
+  }
+
+  speak(text) {
+    if (!this.synth || !this.isEnabled) return;
+
+    try {
+      // Cancel pending utterance to avoid queue lag
+      if (this.synth.speaking) {
+        this.synth.cancel();
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.pitch = this.pitch;
+      utterance.rate = this.rate;
+
+      // Select high-tech English voice if available
+      const voices = this.synth.getVoices();
+      const preferred = voices.find(v => 
+        (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Microsoft') || v.name.includes('Daniel') || v.name.includes('Samantha')) && v.lang.startsWith('en')
+      );
+      if (preferred) {
+        utterance.voice = preferred;
+      }
+
+      this.synth.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis unavailable:', e);
+    }
+  }
+
+  toggle() {
+    this.isEnabled = !this.isEnabled;
+    if (this.isEnabled) {
+      this.speak('Cybernetic speech synthesis online.');
+    } else if (this.synth) {
+      this.synth.cancel();
+    }
+    return this.isEnabled;
   }
 }

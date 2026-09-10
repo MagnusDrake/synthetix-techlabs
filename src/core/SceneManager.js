@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
 export class SceneManager {
-  constructor(canvas) {
+  constructor(canvas, soundEngine = null) {
     this.canvas = canvas;
+    this.soundEngine = soundEngine;
     this.width = window.innerWidth;
     this.height = window.innerHeight;
 
@@ -25,6 +26,13 @@ export class SceneManager {
       target: { x: 0, y: 0 }
     };
 
+    // Biometric Head Offset (-1 to 1)
+    this.biometric = {
+      x: 0,
+      y: 0,
+      z: 0
+    };
+
     // Scroll Progress (0 to 1)
     this.scroll = {
       current: 0,
@@ -38,6 +46,23 @@ export class SceneManager {
       inverted: false
     };
 
+    // Particle Morph Targets State
+    this.morph = {
+      currentTarget: 'core',
+      targetName: 'core',
+      progress: 1.0,
+      speed: 1.8
+    };
+
+    // Time Dilation / Rewind State
+    this.timeDilation = {
+      rate: 1.0, // 1.0 = normal, 0 = freeze, -1 = reverse, scrubber 0..1
+      isRewinding: false,
+      historyMax: 180,
+      history: [],
+      historyIndex: 0
+    };
+
     this.clock = new THREE.Clock();
     this.init();
   }
@@ -45,14 +70,14 @@ export class SceneManager {
   init() {
     // 1. Scene
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x060810, 0.015);
+    this.scene.fog = new THREE.FogExp2(0x060810, 0.012);
 
     // 2. Camera
     this.camera = new THREE.PerspectiveCamera(60, this.width / this.height, 0.1, 1000);
     this.camera.position.set(0, 0, 18);
     this.cameraBaseZ = 18;
 
-    // 3. Renderer
+    // 3. Renderer with WebXR support
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
@@ -64,6 +89,10 @@ export class SceneManager {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
 
+    if (navigator.xr) {
+      this.renderer.xr.enabled = true;
+    }
+
     // 4. Lighting
     this.setupLights();
 
@@ -71,7 +100,7 @@ export class SceneManager {
     this.createSynthetixCore();
     this.createGyroscopicRings();
     this.createFloatingShards();
-    this.createParticleField();
+    this.initParticleMorphTargets();
 
     // 6. Window Resize
     window.addEventListener('resize', () => this.onResize());
@@ -85,17 +114,17 @@ export class SceneManager {
     this.scene.add(this.ambientLight);
 
     // Dynamic mouse-tracking primary point light
-    this.mousePointLight = new THREE.PointLight(this.config.themeColors.primary, 8, 30);
+    this.mousePointLight = new THREE.PointLight(this.config.themeColors.primary, 8, 35);
     this.mousePointLight.position.set(0, 0, 10);
     this.scene.add(this.mousePointLight);
 
-    // Secondary fill light
-    this.secondaryLight = new THREE.DirectionalLight(this.config.themeColors.secondary, 2.5);
-    this.secondaryLight.position.set(-10, 10, -5);
+    // Secondary directional fill light
+    this.secondaryLight = new THREE.DirectionalLight(this.config.themeColors.secondary, 2.8);
+    this.secondaryLight.position.set(-12, 12, -6);
     this.scene.add(this.secondaryLight);
 
     // Back rim light
-    this.rimLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    this.rimLight = new THREE.DirectionalLight(0xffffff, 1.4);
     this.rimLight.position.set(0, -10, -15);
     this.scene.add(this.rimLight);
   }
@@ -103,16 +132,19 @@ export class SceneManager {
   createSynthetixCore() {
     this.coreGroup = new THREE.Group();
 
-    // Inner glowing crystal
+    // Optical Glass Refraction Material (Caustics & Transmission)
     const innerGeo = new THREE.IcosahedronGeometry(3.2, 0);
     this.coreMaterial = new THREE.MeshPhysicalMaterial({
       color: this.config.themeColors.primary,
       emissive: this.config.themeColors.secondary,
-      emissiveIntensity: 0.4,
-      roughness: 0.15,
-      metalness: 0.85,
+      emissiveIntensity: 0.35,
+      roughness: 0.08,
+      metalness: 0.15,
+      transmission: 0.92, // Real-time optical transmission!
+      thickness: 2.6,     // Refraction thickness
+      ior: 1.54,          // Glass IOR
       clearcoat: 1.0,
-      clearcoatRoughness: 0.1,
+      clearcoatRoughness: 0.06,
       wireframe: false
     });
 
@@ -136,7 +168,7 @@ export class SceneManager {
       color: 0xffffff,
       size: 0.08,
       transparent: true,
-      opacity: 0.7
+      opacity: 0.75
     });
     this.pointsMesh = new THREE.Points(pointsGeo, this.pointsMaterial);
     this.coreGroup.add(this.pointsMesh);
@@ -161,7 +193,6 @@ export class SceneManager {
       wireframe: true
     });
 
-    // 3 Concentric Gimbal Rings
     this.ring1 = new THREE.Mesh(new THREE.TorusGeometry(6.2, 0.08, 16, 100), ringMat1);
     this.ring2 = new THREE.Mesh(new THREE.TorusGeometry(7.6, 0.08, 16, 100), ringMat2);
     this.ring3 = new THREE.Mesh(new THREE.TorusGeometry(9.0, 0.08, 16, 100), ringMat1);
@@ -175,36 +206,34 @@ export class SceneManager {
 
   createFloatingShards() {
     this.shardsGroup = new THREE.Group();
-    const shardCount = 32;
-
+    const shardCount = 28;
     this.shards = [];
-    const shardGeo = new THREE.OctahedronGeometry(0.8, 0);
+    const shardGeo = new THREE.OctahedronGeometry(0.7, 0);
 
     for (let i = 0; i < shardCount; i++) {
-      const mat = new THREE.MeshStandardMaterial({
+      const mat = new THREE.MeshPhysicalMaterial({
         color: (i % 2 === 0) ? this.config.themeColors.primary : this.config.themeColors.secondary,
-        metalness: 0.8,
-        roughness: 0.2,
+        metalness: 0.2,
+        roughness: 0.1,
+        transmission: 0.85,
+        thickness: 1.5,
+        ior: 1.5,
         transparent: true,
-        opacity: 0.75
+        opacity: 0.8
       });
 
       const shard = new THREE.Mesh(shardGeo, mat);
-      
-      // Place shards in a toroidal belt around the core, staying away from foreground camera lens
       const radius = 10 + Math.random() * 14;
       const theta = Math.random() * Math.PI * 2;
       const phi = (Math.random() - 0.5) * 1.2;
 
       const sx = radius * Math.cos(theta) * Math.cos(phi);
       const sy = radius * Math.sin(phi);
-      // Keep z strictly behind z = 6 so shards float around the core (z=0) and never block text
       const sz = Math.min(6, (Math.random() - 0.5) * 20);
 
       shard.position.set(sx, sy, sz);
-
       shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
-      shard.scale.setScalar(0.3 + Math.random() * 0.6);
+      shard.scale.setScalar(0.3 + Math.random() * 0.5);
 
       shard.userData = {
         basePos: shard.position.clone(),
@@ -221,6 +250,93 @@ export class SceneManager {
     this.scene.add(this.shardsGroup);
   }
 
+  /**
+   * Generates mathematical 3D coordinates for all 4 morph targets:
+   * 1. Quantum Core Cluster
+   * 2. Neural Cortex Brain Mesh
+   * 3. DNA Double-Helix Lattice
+   * 4. Torus Singularity
+   */
+  initParticleMorphTargets() {
+    const count = this.config.particleCount;
+    this.targetBuffers = {
+      core: new Float32Array(count * 3),
+      brain: new Float32Array(count * 3),
+      dna: new Float32Array(count * 3),
+      torus: new Float32Array(count * 3)
+    };
+
+    // 1. Target: Core (Volumetric cluster around origin)
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const r = 5 + Math.random() * 35;
+      const theta = Math.random() * Math.PI * 2;
+      const z = (Math.random() - 0.5) * 80;
+
+      this.targetBuffers.core[i3] = Math.cos(theta) * r;
+      this.targetBuffers.core[i3 + 1] = Math.sin(theta) * r;
+      this.targetBuffers.core[i3 + 2] = z;
+    }
+
+    // 2. Target: Neural Brain Cortex (Dual-hemisphere synaptic convolutions)
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const hemisphere = i % 2 === 0 ? 1 : -1;
+      const u = Math.random() * Math.PI;
+      const v = (Math.random() - 0.5) * Math.PI;
+
+      // Brain cortex folds & folds
+      const fold = Math.sin(u * 6) * Math.cos(v * 6) * 0.8;
+      const bx = hemisphere * (1.8 + Math.cos(v) * (4.5 + fold));
+      const by = Math.sin(v) * (5.5 + fold);
+      const bz = Math.sin(u) * Math.cos(v) * (6.0 + fold);
+
+      this.targetBuffers.brain[i3] = bx * 1.5;
+      this.targetBuffers.brain[i3 + 1] = by * 1.5;
+      this.targetBuffers.brain[i3 + 2] = bz * 1.5;
+    }
+
+    // 3. Target: DNA Double-Helix (Twisting helical ladder with base rungs)
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const t = (i / count) * Math.PI * 18 - Math.PI * 9;
+      const y = t * 2.2;
+      const isRung = Math.random() > 0.65;
+
+      if (isRung) {
+        // Horizontal connecting base pairs
+        const frac = Math.random() * 2 - 1;
+        const radius = 6 * frac;
+        this.targetBuffers.dna[i3] = Math.cos(t) * radius;
+        this.targetBuffers.dna[i3 + 1] = y;
+        this.targetBuffers.dna[i3 + 2] = Math.sin(t) * radius;
+      } else {
+        // Strand 1 or Strand 2 (180 deg offset)
+        const strandOffset = (i % 2 === 0) ? 0 : Math.PI;
+        const radius = 6.2;
+        this.targetBuffers.dna[i3] = Math.cos(t + strandOffset) * radius;
+        this.targetBuffers.dna[i3 + 1] = y;
+        this.targetBuffers.dna[i3 + 2] = Math.sin(t + strandOffset) * radius;
+      }
+    }
+
+    // 4. Target: Torus Singularity Vortex
+    const R = 11.0;
+    const r = 4.2;
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const u = Math.random() * Math.PI * 2;
+      const v = Math.random() * Math.PI * 2;
+
+      this.targetBuffers.torus[i3] = (R + r * Math.cos(v)) * Math.cos(u);
+      this.targetBuffers.torus[i3 + 1] = r * Math.sin(v) * 1.4;
+      this.targetBuffers.torus[i3 + 2] = (R + r * Math.cos(v)) * Math.sin(u);
+    }
+
+    // Initialize particle geometry with current target
+    this.createParticleField(count);
+  }
+
   createParticleField(count = this.config.particleCount) {
     if (this.particleSystem) {
       this.scene.remove(this.particleSystem);
@@ -231,7 +347,11 @@ export class SceneManager {
     this.particleGeo = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
-    const originalPositions = new Float32Array(count * 3);
+    const sourcePositions = new Float32Array(count * 3);
+
+    const initialBuffer = this.targetBuffers[this.morph.currentTarget] || this.targetBuffers.core;
+    positions.set(initialBuffer);
+    sourcePositions.set(initialBuffer);
 
     const colPrimary = new THREE.Color(this.config.themeColors.primary);
     const colSecondary = new THREE.Color(this.config.themeColors.secondary);
@@ -239,27 +359,10 @@ export class SceneManager {
 
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      // Cylindrical spatial volume around camera path
-      const r = 5 + Math.random() * 45;
-      const theta = Math.random() * Math.PI * 2;
-      const z = (Math.random() - 0.5) * 100;
-
-      const x = Math.cos(theta) * r;
-      const y = Math.sin(theta) * r;
-
-      positions[i3] = x;
-      positions[i3 + 1] = y;
-      positions[i3 + 2] = z;
-
-      originalPositions[i3] = x;
-      originalPositions[i3 + 1] = y;
-      originalPositions[i3 + 2] = z;
-
-      // Color variation
       const rand = Math.random();
       let c = colPrimary;
-      if (rand > 0.7) c = colSecondary;
-      else if (rand > 0.95) c = colWhite;
+      if (rand > 0.65) c = colSecondary;
+      else if (rand > 0.94) c = colWhite;
 
       colors[i3] = c.r;
       colors[i3 + 1] = c.g;
@@ -268,18 +371,57 @@ export class SceneManager {
 
     this.particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     this.particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    this.particleGeo.userData = { originalPositions };
+    this.particleGeo.userData = { sourcePositions };
 
     this.particleMat = new THREE.PointsMaterial({
       size: 0.16,
       vertexColors: true,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.8,
       blending: THREE.AdditiveBlending
     });
 
     this.particleSystem = new THREE.Points(this.particleGeo, this.particleMat);
     this.scene.add(this.particleSystem);
+  }
+
+  setMorphTarget(targetName) {
+    if (!this.targetBuffers[targetName] || this.morph.targetName === targetName) return;
+
+    // Snapshot current rendered positions as source
+    const posAttr = this.particleGeo.getAttribute('position');
+    const sourcePositions = this.particleGeo.userData.sourcePositions;
+    sourcePositions.set(posAttr.array);
+
+    this.morph.currentTarget = this.morph.targetName;
+    this.morph.targetName = targetName;
+    this.morph.progress = 0.0;
+
+    if (this.soundEngine && this.soundEngine.voice) {
+      const names = {
+        core: 'Quantum Core Cluster',
+        brain: 'Neural Cortex Brain Mesh',
+        dna: 'DNA Double Helix Lattice',
+        torus: 'Quantum Torus Singularity'
+      };
+      this.soundEngine.voice.speak(`Morphing particle field to ${names[targetName] || targetName}`);
+    }
+  }
+
+  setTimeDilation(rate) {
+    this.timeDilation.rate = rate;
+    this.timeDilation.isRewinding = rate < 0;
+
+    const overlay = document.getElementById('time-rewind-overlay');
+    if (overlay) {
+      overlay.classList.toggle('active', rate < 0);
+    }
+  }
+
+  setBiometricOffset(x, y, z) {
+    this.biometric.x = x;
+    this.biometric.y = y;
+    this.biometric.z = z;
   }
 
   setTheme(themeKey) {
@@ -293,22 +435,18 @@ export class SceneManager {
     const t = themes[themeKey] || themes['theme-cyber-void'];
     this.config.themeColors = t;
 
-    // Update lights
     this.mousePointLight.color.setHex(t.primary);
     this.secondaryLight.color.setHex(t.secondary);
     this.ambientLight.color.setHex(t.ambient);
 
-    // Update core materials
     this.coreMaterial.color.setHex(t.primary);
     this.coreMaterial.emissive.setHex(t.secondary);
     this.cageMaterial.color.setHex(t.primary);
 
-    // Update rings
     this.ring1.material.color.setHex(t.primary);
     this.ring2.material.color.setHex(t.secondary);
     this.ring3.material.color.setHex(t.primary);
 
-    // Re-create particles with new theme colors
     this.createParticleField(this.config.particleCount);
   }
 
@@ -331,11 +469,11 @@ export class SceneManager {
 
   setParticleCount(count) {
     this.config.particleCount = count;
-    this.createParticleField(count);
+    this.initParticleMorphTargets();
   }
 
   triggerBurst() {
-    this.warp.factor = 4.0;
+    this.warp.factor = 4.5;
   }
 
   invertPolarity() {
@@ -349,6 +487,22 @@ export class SceneManager {
 
   setScroll(progress) {
     this.scroll.target = progress;
+  }
+
+  launchAR() {
+    if (navigator.xr && navigator.xr.isSessionSupported) {
+      navigator.xr.isSessionSupported('immersive-ar').then(supported => {
+        if (supported) {
+          navigator.xr.requestSession('immersive-ar').then(session => {
+            this.renderer.xr.setSession(session);
+          });
+        } else {
+          alert('WebXR AR not supported on this display device. Try opening on a WebXR-compatible mobile browser or headset.');
+        }
+      });
+    } else {
+      alert('WebXR immersive spatial API is not available on this browser. Chrome on Android or Apple Vision Pro recommended.');
+    }
   }
 
   onResize() {
@@ -365,127 +519,165 @@ export class SceneManager {
     const delta = this.clock.getDelta();
     const elapsedTime = this.clock.getElapsedTime();
 
-    // Lerp mouse coordinates
-    const lerp = this.config.lerpFactor;
-    this.mouse.current.x += (this.mouse.target.x - this.mouse.current.x) * lerp;
-    this.mouse.current.y += (this.mouse.target.y - this.mouse.current.y) * lerp;
+    // 1. Audio-Reactive Frequency Analysis
+    let audioFreqs = { bass: 0, mid: 0, treble: 0, average: 0 };
+    if (this.soundEngine) {
+      audioFreqs = this.soundEngine.getFrequencyBands();
+    }
 
-    // Lerp scroll
+    // 2. Mouse & Biometric Parallax Combined
+    const lerp = this.config.lerpFactor;
+    // Combine mouse and webcam head tracking if active
+    const effectiveTargetX = this.mouse.target.x + this.biometric.x * 1.5;
+    const effectiveTargetY = this.mouse.target.y + this.biometric.y * 1.5;
+
+    this.mouse.current.x += (effectiveTargetX - this.mouse.current.x) * lerp;
+    this.mouse.current.y += (effectiveTargetY - this.mouse.current.y) * lerp;
+
     this.scroll.current += (this.scroll.target - this.scroll.current) * lerp;
 
-    // 1. Dynamic Parallax Camera Position based on Scroll & Mouse
+    // Camera trajectory
     const pStrength = this.config.parallaxMultiplier;
     const mouseOffsetX = this.mouse.current.x * 4 * pStrength;
     const mouseOffsetY = this.mouse.current.y * 3 * pStrength;
 
-    // Scroll trajectory path:
-    // As scroll goes 0 -> 1:
-    // Z: 18 -> 10 -> -5 -> 15 (traversal loop)
-    // X: curve left and right
     const scrollZ = this.cameraBaseZ - (this.scroll.current * 28);
     const scrollX = Math.sin(this.scroll.current * Math.PI * 2) * 5;
     const scrollY = -this.scroll.current * 10;
 
     this.camera.position.x = scrollX + mouseOffsetX;
     this.camera.position.y = scrollY - mouseOffsetY;
-    this.camera.position.z = scrollZ;
+    this.camera.position.z = scrollZ - (this.biometric.z ? (this.biometric.z - 1) * 6 : 0);
 
-    // Camera look target with parallax tilt
     const lookTarget = new THREE.Vector3(
       mouseOffsetX * 0.4,
       scrollY * 0.9 - mouseOffsetY * 0.4,
       scrollZ - 15
     );
     this.camera.lookAt(lookTarget);
-
-    // Roll camera slightly based on mouse horizontal speed
     this.camera.rotation.z = -this.mouse.current.x * 0.06 * pStrength;
 
-    // 2. Update Mouse Point Light
+    // 3. Audio-Reactive Point Light Modulation
     this.mousePointLight.position.x = mouseOffsetX * 1.5;
     this.mousePointLight.position.y = scrollY - mouseOffsetY * 1.5;
     this.mousePointLight.position.z = scrollZ - 6;
+    this.mousePointLight.intensity = 8 + audioFreqs.treble * 16;
 
-    // 3. Rotate 3D Core
+    // 4. Audio-Reactive Core Scale & Rotation
     if (this.coreGroup) {
-      this.coreMesh.rotation.x = elapsedTime * 0.35;
-      this.coreMesh.rotation.y = elapsedTime * 0.5;
-      this.cageMesh.rotation.x = -elapsedTime * 0.2;
-      this.cageMesh.rotation.y = -elapsedTime * 0.3;
-      this.pointsMesh.rotation.y = elapsedTime * 0.15;
+      const bassPulse = 1.0 + audioFreqs.bass * 0.4;
+      const rotSpeed = this.timeDilation.rate;
 
-      // Slight scale pulsation
-      const pulse = 1 + Math.sin(elapsedTime * 2.5) * 0.04;
-      this.coreMesh.scale.setScalar(pulse);
+      this.coreMesh.rotation.x += delta * 0.35 * rotSpeed;
+      this.coreMesh.rotation.y += delta * 0.5 * rotSpeed;
+      this.cageMesh.rotation.x -= delta * 0.2 * rotSpeed;
+      this.cageMesh.rotation.y -= delta * 0.3 * rotSpeed;
+      this.pointsMesh.rotation.y += delta * 0.15 * rotSpeed;
+
+      const idlePulse = 1 + Math.sin(elapsedTime * 2.5) * 0.04;
+      this.coreMesh.scale.setScalar(idlePulse * bassPulse);
+      this.cageMesh.scale.setScalar((idlePulse + 0.1) * (1.0 + audioFreqs.mid * 0.25));
     }
 
-    // 4. Rotate Gyroscopic Rings
+    // 5. Gyroscopic Rings Rotation
     if (this.ringGroup) {
-      this.ring1.rotation.x = elapsedTime * 0.6;
-      this.ring1.rotation.y = elapsedTime * 0.4;
-
-      this.ring2.rotation.y = -elapsedTime * 0.5;
-      this.ring2.rotation.z = elapsedTime * 0.3;
-
-      this.ring3.rotation.x = -elapsedTime * 0.4;
-      this.ring3.rotation.z = -elapsedTime * 0.6;
+      const rotSpeed = this.timeDilation.rate;
+      this.ring1.rotation.x += delta * 0.6 * rotSpeed;
+      this.ring1.rotation.y += delta * 0.4 * rotSpeed;
+      this.ring2.rotation.y -= delta * 0.5 * rotSpeed;
+      this.ring2.rotation.z += delta * 0.3 * rotSpeed;
+      this.ring3.rotation.x -= delta * 0.4 * rotSpeed;
+      this.ring3.rotation.z -= delta * 0.6 * rotSpeed;
     }
 
-    // 5. Update Floating Shards
+    // 6. Floating Shards
     if (this.shards) {
+      const rotSpeed = this.timeDilation.rate;
       this.shards.forEach((shard) => {
         const d = shard.userData;
-        const t = elapsedTime * d.orbitSpeed + d.phase;
+        const t = elapsedTime * d.orbitSpeed * rotSpeed + d.phase;
         shard.position.x = d.basePos.x + Math.sin(t) * 1.5;
         shard.position.y = d.basePos.y + Math.cos(t * 1.2) * 1.5;
-        shard.rotation.x += d.rotSpeedX * delta;
-        shard.rotation.y += d.rotSpeedY * delta;
+        shard.rotation.x += d.rotSpeedX * delta * rotSpeed;
+        shard.rotation.y += d.rotSpeedY * delta * rotSpeed;
       });
     }
 
-    // 6. Update Particle Field Dynamics
+    // 7. Particle Morphing & Physics Interpolation
     if (this.particleSystem) {
       const posAttr = this.particleGeo.getAttribute('position');
       const positions = posAttr.array;
-      const originals = this.particleGeo.userData.originalPositions;
       const count = positions.length / 3;
+      const targetBuffer = this.targetBuffers[this.morph.targetName];
+      const sourceBuffer = this.particleGeo.userData.sourcePositions;
 
-      // Warp factor decays back to 0
+      // Handle Morph Transition
+      if (this.morph.progress < 1.0) {
+        this.morph.progress = Math.min(1.0, this.morph.progress + delta * this.morph.speed);
+        // Smooth cubic ease-in-out
+        const t = this.morph.progress;
+        const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        for (let i = 0; i < positions.length; i++) {
+          positions[i] = sourceBuffer[i] + (targetBuffer[i] - sourceBuffer[i]) * ease;
+        }
+      }
+
+      // Warp Factor & Audio-Reactive Particle Pulse
       this.warp.factor += (0 - this.warp.factor) * 0.05;
-      const currentWarpSpeed = (1.0 + this.warp.factor) * (this.warp.inverted ? -1 : 1);
+      const currentWarpSpeed = (1.0 + this.warp.factor + audioFreqs.bass * 2.0) * (this.warp.inverted ? -1 : 1) * this.timeDilation.rate;
+      this.particleSystem.rotation.y += delta * 0.06 * currentWarpSpeed;
 
-      // Rotate particle group slowly
-      this.particleSystem.rotation.y = elapsedTime * 0.03 * currentWarpSpeed;
+      // Dynamic Particle Point Size reacting to Treble
+      if (this.particleMat) {
+        this.particleMat.size = 0.16 + audioFreqs.treble * 0.22;
+      }
 
-      // React to mouse coordinates
-      const mx = this.mouse.current.x * 10;
-      const my = -this.mouse.current.y * 10;
+      // Interactive cursor gravitational deflection
+      const mx = this.mouse.current.x * 12;
+      const my = -this.mouse.current.y * 12;
 
-      for (let i = 0; i < count; i += 8) { // update subset per frame for high performance
+      for (let i = 0; i < count; i += 6) {
         const i3 = i * 3;
-        const ox = originals[i3];
-        const oy = originals[i3 + 1];
-        const oz = originals[i3 + 2];
-
-        // Gravitational displacement from cursor
         const dx = positions[i3] - mx;
         const dy = positions[i3 + 1] - my;
         const distSq = dx * dx + dy * dy;
 
-        if (distSq < 150) {
-          const force = (150 - distSq) / 150 * 0.08;
+        if (distSq < 160) {
+          const force = (160 - distSq) / 160 * 0.1;
           positions[i3] += dx * force;
           positions[i3 + 1] += dy * force;
-        } else {
-          // Spring back
-          positions[i3] += (ox - positions[i3]) * 0.03;
-          positions[i3 + 1] += (oy - positions[i3 + 1]) * 0.03;
         }
       }
+
       posAttr.needsUpdate = true;
+
+      // 8. Time Dilation History Ring Buffer
+      if (this.timeDilation.rate > 0) {
+        if (this.timeDilation.history.length >= this.timeDilation.historyMax) {
+          this.timeDilation.history.shift();
+        }
+        // Save copy of positions and core state
+        this.timeDilation.history.push({
+          pos: new Float32Array(positions),
+          coreRotX: this.coreMesh ? this.coreMesh.rotation.x : 0,
+          coreRotY: this.coreMesh ? this.coreMesh.rotation.y : 0
+        });
+      } else if (this.timeDilation.rate < 0 && this.timeDilation.history.length > 0) {
+        // Rewind from history
+        const frame = this.timeDilation.history.pop();
+        if (frame) {
+          positions.set(frame.pos);
+          if (this.coreMesh) {
+            this.coreMesh.rotation.x = frame.coreRotX;
+            this.coreMesh.rotation.y = frame.coreRotY;
+          }
+          posAttr.needsUpdate = true;
+        }
+      }
     }
 
-    // Render Scene
+    // 9. Render Scene
     this.renderer.render(this.scene, this.camera);
   }
 }

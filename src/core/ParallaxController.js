@@ -23,7 +23,19 @@ export class ParallaxController {
     // Parallax Sensitivity
     this.sensitivity = 1.0;
 
+    // Biometric Head Tracking
+    this.biometric = { x: 0, y: 0, z: 0 };
+
     this.init();
+  }
+
+  setBiometricOffset(bx, by, bz) {
+    this.biometric.x = bx;
+    this.biometric.y = by;
+    this.biometric.z = bz;
+    if (this.sceneManager) {
+      this.sceneManager.setBiometricOffset(bx, by, bz);
+    }
   }
 
   init() {
@@ -144,19 +156,23 @@ export class ParallaxController {
       this.cursorRing.style.transform = `translate(${this.ringPos.x}px, ${this.ringPos.y}px)`;
     }
 
+    // Combined coordinates for mouse + biometric head tracking
+    const totalX = (this.mouse.x + this.biometric.x * 1.5) * this.sensitivity;
+    const totalY = (this.mouse.y + this.biometric.y * 1.5) * this.sensitivity;
+
     // 3. Update DOM parallax elements in Hero section
     const heroContent = document.querySelector('.hero-content');
     if (heroContent) {
-      const offsetX = this.mouse.x * 20 * this.sensitivity;
-      const offsetY = this.mouse.y * 15 * this.sensitivity;
+      const offsetX = totalX * 20;
+      const offsetY = totalY * 15;
       heroContent.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0)`;
 
       // Subtle inner depth on badges and title
       const depthElements = heroContent.querySelectorAll('[data-depth]');
       depthElements.forEach((el) => {
         const depth = parseFloat(el.getAttribute('data-depth')) || 10;
-        const elX = this.mouse.x * (depth * 0.6) * this.sensitivity;
-        const elY = this.mouse.y * (depth * 0.4) * this.sensitivity;
+        const elX = totalX * (depth * 0.6);
+        const elY = totalY * (depth * 0.4);
         el.style.transform = `translate3d(${elX}px, ${elY}px, 0)`;
       });
     }
@@ -164,8 +180,8 @@ export class ParallaxController {
     // Telemetry side box parallax
     const telemetryBox = document.querySelector('.hero-side-telemetry');
     if (telemetryBox) {
-      const telX = -this.mouse.x * 25 * this.sensitivity;
-      const telY = -this.mouse.y * 20 * this.sensitivity;
+      const telX = -totalX * 25;
+      const telY = -totalY * 20;
       telemetryBox.style.transform = `translate3d(${telX}px, ${telY}px, 0)`;
     }
   }

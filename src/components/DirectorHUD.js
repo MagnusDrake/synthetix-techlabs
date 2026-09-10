@@ -1,8 +1,9 @@
 export class DirectorHUD {
-  constructor(sceneManager, parallaxController, soundEngine) {
+  constructor(sceneManager, parallaxController, soundEngine, appController = null) {
     this.scene = sceneManager;
     this.parallax = parallaxController;
     this.sound = soundEngine;
+    this.app = appController;
 
     this.hud = document.getElementById('director-hud');
     this.toggleBtn = document.getElementById('hud-toggle');
@@ -23,6 +24,19 @@ export class DirectorHUD {
     this.volumeSlider = document.getElementById('hud-slider-volume');
     this.volumeVal = document.getElementById('hud-val-volume');
 
+    // Advanced New Controls
+    this.morphChips = document.querySelectorAll('.morph-chip');
+    this.headTrackBtn = document.getElementById('hud-headtrack-btn');
+    this.headTrackStatus = document.getElementById('hud-headtrack-status');
+    this.webcamPip = document.getElementById('hud-webcam-pip');
+
+    this.timeSlider = document.getElementById('hud-slider-time');
+    this.timeVal = document.getElementById('hud-val-time');
+
+    this.voiceBtn = document.getElementById('hud-voice-btn');
+    this.arBtn = document.getElementById('hud-ar-btn');
+    this.cmdBtn = document.getElementById('hud-cmd-btn');
+
     this.resetBtn = document.getElementById('hud-reset-all');
 
     this.init();
@@ -37,7 +51,6 @@ export class DirectorHUD {
       this.closeBtn.addEventListener('click', () => this.close());
     }
 
-    // Close when clicking outside HUD on mobile
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close();
     });
@@ -102,6 +115,82 @@ export class DirectorHUD {
       });
     }
 
+    // 1. Particle Morphing Target Selection
+    this.morphChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        this.morphChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        const target = chip.getAttribute('data-morph');
+        if (this.scene) this.scene.setMorphTarget(target);
+        if (this.sound) this.sound.playWarpTone();
+      });
+    });
+
+    // 2. Biometric Head-Tracking Toggle
+    if (this.headTrackBtn) {
+      this.headTrackBtn.addEventListener('click', async () => {
+        if (this.app) {
+          const active = await this.app.toggleFaceTracking();
+          this.headTrackBtn.classList.toggle('active', active);
+          if (this.headTrackStatus) {
+            this.headTrackStatus.textContent = active ? 'BIOMETRIC: ACTIVE' : 'BIOMETRIC: OFF';
+          }
+          if (this.webcamPip) {
+            this.webcamPip.classList.toggle('visible', active);
+          }
+          if (this.sound) {
+            this.sound.playClickTone();
+            this.sound.voice.speak(active ? 'Biometric facial tracking online.' : 'Biometric tracking offline.');
+          }
+        }
+      });
+    }
+
+    // 3. Time Dilation Rewind Scrubber
+    if (this.timeSlider) {
+      this.timeSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (this.timeVal) {
+          if (val === 1.0) this.timeVal.textContent = 'LIVE (+1.0x)';
+          else if (val === 0.0) this.timeVal.textContent = 'FREEZE (0.0x)';
+          else if (val < 0) this.timeVal.textContent = `REWIND (${val.toFixed(1)}x)`;
+          else this.timeVal.textContent = `SLOW (${val.toFixed(1)}x)`;
+        }
+        if (this.scene) {
+          this.scene.setTimeDilation(val);
+        }
+      });
+    }
+
+    // 4. Voice Announcements Toggle
+    if (this.voiceBtn) {
+      this.voiceBtn.addEventListener('click', () => {
+        if (this.sound && this.sound.voice) {
+          const enabled = this.sound.voice.toggle();
+          this.voiceBtn.classList.toggle('active', enabled);
+          this.voiceBtn.textContent = enabled ? 'VOICE: LIVE' : 'VOICE: MUTED';
+        }
+      });
+    }
+
+    // 5. Launch WebXR AR Mode
+    if (this.arBtn) {
+      this.arBtn.addEventListener('click', () => {
+        if (this.scene) this.scene.launchAR();
+        if (this.sound) this.sound.playWarpTone();
+      });
+    }
+
+    // 6. Open Command Palette from HUD
+    if (this.cmdBtn) {
+      this.cmdBtn.addEventListener('click', () => {
+        if (this.app && this.app.cmdPalette) {
+          this.close();
+          this.app.cmdPalette.open();
+        }
+      });
+    }
+
     // Reset All
     if (this.resetBtn) {
       this.resetBtn.addEventListener('click', () => this.resetDefaults());
@@ -158,10 +247,21 @@ export class DirectorHUD {
       if (this.sound) this.sound.setVolume(0.7);
     }
 
+    if (this.timeSlider) {
+      this.timeSlider.value = 1.0;
+      if (this.timeVal) this.timeVal.textContent = 'LIVE (+1.0x)';
+      if (this.scene) this.scene.setTimeDilation(1.0);
+    }
+
     this.modeBtns.forEach((b) => {
       b.classList.toggle('active', b.getAttribute('data-mode') === 'solid');
     });
     if (this.scene) this.scene.setRenderMode('solid');
+
+    this.morphChips.forEach((c) => {
+      c.classList.toggle('active', c.getAttribute('data-morph') === 'core');
+    });
+    if (this.scene) this.scene.setMorphTarget('core');
 
     if (this.sound) this.sound.playWarpTone();
   }

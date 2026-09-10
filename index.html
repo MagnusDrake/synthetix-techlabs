@@ -14,6 +14,15 @@
   <!-- 3D WebGL Canvas Layer -->
   <canvas id="webgl-canvas"></canvas>
 
+  <!-- Time-Dilation Rewind Visual Overlay -->
+  <div id="time-rewind-overlay" class="time-rewind-overlay">
+    <div class="rewind-scanlines"></div>
+    <div class="rewind-badge">
+      <span class="rewind-icon">⏪</span>
+      <span>TIME-DILATION: REVERSING VECTOR FIELD</span>
+    </div>
+  </div>
+
   <!-- Custom Cursor -->
   <div id="cursor-dot" class="cursor-dot"></div>
   <div id="cursor-ring" class="cursor-ring"></div>
@@ -43,6 +52,12 @@
       </nav>
 
       <div class="header-actions">
+        <!-- Command Palette Trigger Hint -->
+        <button id="header-cmd-btn" class="hud-pill-btn cmd-hint-btn" title="Open Command Terminal (Ctrl + K)">
+          <span class="cmd-kbd">CTRL + K</span>
+          <span>TERMINAL</span>
+        </button>
+
         <button id="audio-toggle" class="hud-pill-btn audio-btn" title="Toggle Spatial Audio FX">
           <span class="sound-wave">
             <span></span><span></span><span></span><span></span>
@@ -121,7 +136,7 @@
             <span class="gyro-ring"></span>
             <span class="gyro-dot"></span>
           </div>
-          <span>PERSPECTIVE REACTIVE // MOVE CURSOR & SCROLL TO WARP Z-AXIS</span>
+          <span>PERSPECTIVE REACTIVE // MOVE CURSOR, LEAN HEAD & SCROLL TO WARP Z-AXIS</span>
         </div>
       </div>
 
@@ -509,7 +524,7 @@
 
   </main>
 
-  <!-- DIRECTOR HUD / LAB TERMINAL (Slide-out or Draggable Console) -->
+  <!-- DIRECTOR HUD / LAB TERMINAL (Slide-out Console) -->
   <aside id="director-hud" class="director-hud closed">
     <div class="hud-header">
       <div class="hud-title-wrap">
@@ -520,6 +535,58 @@
     </div>
 
     <div class="hud-body">
+
+      <!-- PARTICLE MORPH TARGETS (NEW) -->
+      <div class="hud-section">
+        <label class="hud-label">QUANTUM PARTICLE MORPH MATRIX</label>
+        <div class="morph-grid">
+          <button class="morph-chip active" data-morph="core">
+            <span class="morph-icon">◈</span>
+            <span>CORE</span>
+          </button>
+          <button class="morph-chip" data-morph="brain">
+            <span class="morph-icon">🧠</span>
+            <span>BRAIN CORTEX</span>
+          </button>
+          <button class="morph-chip" data-morph="dna">
+            <span class="morph-icon">🧬</span>
+            <span>DNA HELIX</span>
+          </button>
+          <button class="morph-chip" data-morph="torus">
+            <span class="morph-icon">◎</span>
+            <span>TORUS VORTEX</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- BIOMETRIC HEAD TRACKING (NEW) -->
+      <div class="hud-section">
+        <div class="hud-row">
+          <label class="hud-label">BIOMETRIC WEBCAM HEAD-TRACKING</label>
+          <span class="hud-val" id="hud-headtrack-status">BIOMETRIC: OFF</span>
+        </div>
+        <button id="hud-headtrack-btn" class="hud-action-btn">
+          <span>ACTIVATE WEBCAM PARALLAX</span>
+        </button>
+        <!-- Mini PIP Feed -->
+        <div id="hud-webcam-pip" class="hud-webcam-pip">
+          <div class="pip-overlay">
+            <span class="pip-reticle"></span>
+            <span class="pip-label">OPTICAL TRACK // LIVE</span>
+          </div>
+          <div id="pip-video-container" class="pip-video-container"></div>
+        </div>
+      </div>
+
+      <!-- TIME DILATION REWIND SCRUBBER (NEW) -->
+      <div class="hud-section">
+        <div class="hud-row">
+          <label class="hud-label">TIME DILATION (PHYSICS REWIND)</label>
+          <span class="hud-val" id="hud-val-time">LIVE (+1.0x)</span>
+        </div>
+        <input type="range" id="hud-slider-time" min="-1.0" max="1.0" step="0.1" value="1.0" class="hud-range" />
+      </div>
+
       <!-- THEME SELECTOR -->
       <div class="hud-section">
         <label class="hud-label">COLOR HARMONIC PRESET</label>
@@ -565,7 +632,7 @@
       <div class="hud-section">
         <label class="hud-label">3D CORE SHADER MODE</label>
         <div class="hud-btn-group">
-          <button class="hud-mode-btn active" data-mode="solid">CRYSTAL SHADED</button>
+          <button class="hud-mode-btn active" data-mode="solid">CRYSTAL SHADED (GLASS)</button>
           <button class="hud-mode-btn" data-mode="wireframe">WIREFRAME</button>
           <button class="hud-mode-btn" data-mode="points">POINTS MATRIX</button>
         </div>
@@ -580,19 +647,56 @@
         <input type="range" id="hud-slider-particles" min="2000" max="15000" step="1000" value="8000" class="hud-range" />
       </div>
 
-      <!-- SOUND VOLUME -->
+      <!-- SOUND & AI VOICE -->
       <div class="hud-section">
         <div class="hud-row">
           <label class="hud-label">SYNTHESIZER HARMONICS GAIN</label>
           <span class="hud-val" id="hud-val-volume">70%</span>
         </div>
         <input type="range" id="hud-slider-volume" min="0" max="100" value="70" class="hud-range" />
+        <div class="hud-tools-row">
+          <button id="hud-voice-btn" class="hud-action-btn active">VOICE: LIVE</button>
+          <button id="hud-ar-btn" class="hud-action-btn">LAUNCH SPATIAL AR</button>
+        </div>
       </div>
+
+      <!-- TERMINAL SHORTCUT BUTTON -->
+      <button id="hud-cmd-btn" class="hud-action-btn special-btn">OPEN COMMAND TERMINAL (CTRL+K)</button>
 
       <!-- RESET BUTTON -->
       <button id="hud-reset-all" class="hud-reset-btn">RESTORE FACTORY CALIBRATION</button>
     </div>
   </aside>
+
+  <!-- FUTURISTIC COMMAND PALETTE (CTRL+K) -->
+  <div id="command-palette" class="command-palette hidden">
+    <div class="cmd-backdrop" id="cmd-backdrop"></div>
+    <div class="cmd-dialog">
+      <div class="cmd-header">
+        <div class="cmd-title-group">
+          <span class="cmd-led"></span>
+          <span class="cmd-title">SYNTHETIX://DIRECT_TERMINAL_V4.2</span>
+        </div>
+        <div class="cmd-hints">
+          <span class="key-tag">↑↓ SELECT</span>
+          <span class="key-tag">ENTER RUN</span>
+          <span class="key-tag">ESC CLOSE</span>
+          <button id="cmd-close" class="cmd-close-btn">×</button>
+        </div>
+      </div>
+
+      <div class="cmd-input-wrap">
+        <span class="cmd-prompt">&gt;</span>
+        <input type="text" id="cmd-input" placeholder="Type directive (e.g. /morph brain, /theme solar, /burst)..." autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div id="cmd-list" class="cmd-list"></div>
+
+      <div class="cmd-footer">
+        <span id="cmd-log" class="cmd-log">&gt; SYSTEM READY. 19 PROTOCOLS LOADED.</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Script Entrypoint -->
   <script type="module" src="/src/main.js"></script>
