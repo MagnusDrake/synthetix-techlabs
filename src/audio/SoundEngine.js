@@ -175,6 +175,66 @@ export class SoundEngine {
     osc.stop(this.ctx.currentTime + 0.45);
   }
 
+  playExplosionTone() {
+    if (this.voice && this.voice.isEnabled) {
+      this.voice.speak('Warning: Quantum burst anomaly detected.');
+    }
+
+    if (!this.isEnabled || !this.ctx) return;
+
+    // 1. Sub-Bass Drop
+    const subOsc = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    subOsc.type = 'sawtooth';
+    subOsc.frequency.setValueAtTime(220, this.ctx.currentTime);
+    subOsc.frequency.exponentialRampToValueAtTime(32, this.ctx.currentTime + 0.8);
+
+    subGain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+    subGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.9);
+
+    const subFilter = this.ctx.createBiquadFilter();
+    subFilter.type = 'lowpass';
+    subFilter.frequency.setValueAtTime(400, this.ctx.currentTime);
+    subFilter.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.8);
+
+    subOsc.connect(subFilter);
+    subFilter.connect(subGain);
+    subGain.connect(this.masterGain);
+
+    subOsc.start();
+    subOsc.stop(this.ctx.currentTime + 0.9);
+
+    // 2. White Noise Shockwave
+    try {
+      const bufferSize = this.ctx.sampleRate * 0.8;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(2400, this.ctx.currentTime);
+      noiseFilter.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + 0.7);
+
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.75);
+
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(this.masterGain);
+
+      noise.start();
+    } catch (e) {
+      console.warn('Noise buffer error:', e);
+    }
+  }
+
   // Returns normalized audio frequency bands: { bass: 0..1, mid: 0..1, treble: 0..1, average: 0..1 }
   getFrequencyBands() {
     if (!this.analyser || !this.freqData || !this.isEnabled) {

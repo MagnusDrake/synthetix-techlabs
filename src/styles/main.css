@@ -1183,6 +1183,29 @@ body.cursor-hover .cursor-ring {
   overflow: hidden;
   box-shadow: var(--card-shadow);
   cursor: crosshair;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.sandbox-display.bursting {
+  animation: sandbox-burst-shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 50px var(--accent-primary), 0 0 100px rgba(138, 43, 226, 0.5), inset 0 0 40px rgba(0, 240, 255, 0.35) !important;
+}
+
+.sandbox-display.bursting .vortex-center-visual {
+  animation: vortex-burst-pulse 0.85s ease-out forwards;
+}
+
+@keyframes sandbox-burst-shake {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  10%, 30%, 50%, 70%, 90% { transform: translate(-3px, 2px) scale(1.008); }
+  20%, 40%, 60%, 80% { transform: translate(3px, -2px) scale(1.004); }
+}
+
+@keyframes vortex-burst-pulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  30% { transform: scale(3.2); filter: brightness(3.5); }
+  100% { transform: scale(1); filter: brightness(1); }
 }
 
 .sandbox-hud-overlay {

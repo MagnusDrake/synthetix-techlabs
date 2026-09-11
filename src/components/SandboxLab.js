@@ -39,10 +39,29 @@ export class SandboxLab {
     if (this.burstBtn) {
       this.burstBtn.addEventListener('click', () => {
         if (this.scene) this.scene.triggerBurst();
-        if (this.sound) this.sound.playWarpTone();
 
         this.burstBtn.classList.add('active');
-        setTimeout(() => this.burstBtn.classList.remove('active'), 400);
+        setTimeout(() => this.burstBtn.classList.remove('active'), 500);
+
+        // Visual flash & recoil shake on the sandbox display viewport
+        const display = document.querySelector('.sandbox-display');
+        if (display) {
+          display.classList.add('bursting');
+          setTimeout(() => display.classList.remove('bursting'), 1000);
+        }
+
+        // Spike HUD Telemetry to singularity levels
+        if (this.gravDisplay) this.gravDisplay.textContent = '18.50 G [BURST]';
+        if (this.speedDisplay) this.speedDisplay.textContent = '999.9 km/s [MAX]';
+        if (this.vectorDisplay) this.vectorDisplay.textContent = 'EXPULSION: RADIAL';
+        if (this.pitchDisplay) this.pitchDisplay.textContent = '880.0 Hz [PEAK]';
+
+        if (this.burstTimeout) clearTimeout(this.burstTimeout);
+        this.burstTimeout = setTimeout(() => {
+          if (!this.isInteracting) {
+            this.resetMetrics();
+          }
+        }, 3500);
       });
     }
 

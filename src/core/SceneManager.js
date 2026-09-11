@@ -63,6 +63,12 @@ export class SceneManager {
       historyIndex: 0
     };
 
+    // Burst Shockwave & Camera Recoil
+    this.cameraShake = 0;
+    this.flashIntensity = 0;
+    this.isBursting = false;
+    this.burstEnergy = 0;
+
     this.clock = new THREE.Clock();
     this.init();
   }
@@ -100,6 +106,7 @@ export class SceneManager {
     this.createSynthetixCore();
     this.createGyroscopicRings();
     this.createFloatingShards();
+    this.createShockwaveMesh();
     this.initParticleMorphTargets();
 
     // 6. Window Resize
@@ -107,6 +114,22 @@ export class SceneManager {
 
     // 7. Start Render Loop
     this.animate();
+  }
+
+  createShockwaveMesh() {
+    const shockGeo = new THREE.RingGeometry(0.2, 2.2, 64);
+    this.shockwaveMat = new THREE.MeshBasicMaterial({
+      color: this.config.themeColors.primary,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    this.shockwave = new THREE.Mesh(shockGeo, this.shockwaveMat);
+    this.shockwave.renderOrder = 999;
+    this.shockwave.visible = false;
+    this.scene.add(this.shockwave);
   }
 
   setupLights() {
@@ -473,7 +496,63 @@ export class SceneManager {
   }
 
   triggerBurst() {
-    this.warp.factor = 4.5;
+    this.warp.factor = 8.0;
+    this.cameraShake = 3.2;
+    this.flashIntensity = 70.0;
+    this.isBursting = true;
+    this.burstEnergy = 1.0;
+
+    // 1. High-Velocity Radial Particle Expulsion
+    if (this.particleGeo) {
+      const posAttr = this.particleGeo.getAttribute('position');
+      const positions = posAttr.array;
+      const count = positions.length / 3;
+
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        let x = positions[i3];
+        let y = positions[i3 + 1];
+        let z = positions[i3 + 2];
+        let len = Math.hypot(x, y, z);
+
+        if (len < 0.1) {
+          x = (Math.random() - 0.5) * 2;
+          y = (Math.random() - 0.5) * 2;
+          z = (Math.random() - 0.5) * 2;
+          len = Math.hypot(x, y, z);
+        }
+
+        // Violent radial expulsion outward away from origin
+        const force = 28.0 + Math.random() * 42.0;
+        positions[i3] += (x / len) * force;
+        positions[i3 + 1] += (y / len) * force;
+        positions[i3 + 2] += (z / len) * force;
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    // 2. Glowing Shockwave Mesh Setup
+    if (this.shockwave) {
+      this.shockwave.visible = true;
+      this.shockwave.scale.set(0.1, 0.1, 0.1);
+      this.shockwave.position.set(0, 0, 0);
+      if (this.shockwaveMat) {
+        this.shockwaveMat.opacity = 1.0;
+      }
+    }
+
+    // 3. Core Mesh Kinetic Expansion Recoil
+    if (this.coreMesh) {
+      this.coreMesh.scale.setScalar(3.2);
+    }
+    if (this.cageMesh) {
+      this.cageMesh.scale.setScalar(3.8);
+    }
+
+    // 4. Audio FX & AI Voice Alert
+    if (this.soundEngine) {
+      this.soundEngine.playExplosionTone();
+    }
   }
 
   invertPolarity() {
@@ -549,6 +628,15 @@ export class SceneManager {
     this.camera.position.y = scrollY - mouseOffsetY;
     this.camera.position.z = scrollZ - (this.biometric.z ? (this.biometric.z - 1) * 6 : 0);
 
+    // Camera shake recoil from quantum burst
+    if (this.cameraShake > 0.001) {
+      this.camera.position.x += (Math.random() - 0.5) * this.cameraShake;
+      this.camera.position.y += (Math.random() - 0.5) * this.cameraShake;
+      this.camera.position.z += (Math.random() - 0.5) * this.cameraShake;
+      this.cameraShake *= Math.pow(0.04, delta);
+      if (this.cameraShake < 0.001) this.cameraShake = 0;
+    }
+
     const lookTarget = new THREE.Vector3(
       mouseOffsetX * 0.4,
       scrollY * 0.9 - mouseOffsetY * 0.4,
@@ -557,11 +645,15 @@ export class SceneManager {
     this.camera.lookAt(lookTarget);
     this.camera.rotation.z = -this.mouse.current.x * 0.06 * pStrength;
 
-    // 3. Audio-Reactive Point Light Modulation
+    // 3. Audio-Reactive Point Light Modulation & Burst Flash
     this.mousePointLight.position.x = mouseOffsetX * 1.5;
     this.mousePointLight.position.y = scrollY - mouseOffsetY * 1.5;
     this.mousePointLight.position.z = scrollZ - 6;
-    this.mousePointLight.intensity = 8 + audioFreqs.treble * 16;
+    this.mousePointLight.intensity = (8 + audioFreqs.treble * 16) + this.flashIntensity;
+    if (this.flashIntensity > 0.01) {
+      this.flashIntensity *= Math.pow(0.04, delta);
+      if (this.flashIntensity < 0.01) this.flashIntensity = 0;
+    }
 
     // 4. Audio-Reactive Core Scale & Rotation
     if (this.coreGroup) {
@@ -577,6 +669,17 @@ export class SceneManager {
       const idlePulse = 1 + Math.sin(elapsedTime * 2.5) * 0.04;
       this.coreMesh.scale.setScalar(idlePulse * bassPulse);
       this.cageMesh.scale.setScalar((idlePulse + 0.1) * (1.0 + audioFreqs.mid * 0.25));
+    }
+
+    // Shockwave Ring Animation
+    if (this.shockwave && this.shockwave.visible) {
+      this.shockwave.quaternion.copy(this.camera.quaternion);
+      this.shockwave.scale.addScalar(delta * 65.0);
+      this.shockwaveMat.opacity -= delta * 1.4;
+      if (this.shockwaveMat.opacity <= 0) {
+        this.shockwaveMat.opacity = 0;
+        this.shockwave.visible = false;
+      }
     }
 
     // 5. Gyroscopic Rings Rotation
@@ -608,7 +711,7 @@ export class SceneManager {
       const posAttr = this.particleGeo.getAttribute('position');
       const positions = posAttr.array;
       const count = positions.length / 3;
-      const targetBuffer = this.targetBuffers[this.morph.targetName];
+      const targetBuffer = this.targetBuffers[this.morph.targetName] || this.targetBuffers.core;
       const sourceBuffer = this.particleGeo.userData.sourcePositions;
 
       // Handle Morph Transition
@@ -621,6 +724,22 @@ export class SceneManager {
         for (let i = 0; i < positions.length; i++) {
           positions[i] = sourceBuffer[i] + (targetBuffer[i] - sourceBuffer[i]) * ease;
         }
+      } else if (this.isBursting || this.burstEnergy > 0.001) {
+        // Smooth spring recovery back to active morph target after explosion
+        const springFactor = Math.min(1.0, delta * 3.8);
+        let maxDiff = 0;
+        for (let i = 0; i < positions.length; i++) {
+          const diff = targetBuffer[i] - positions[i];
+          positions[i] += diff * springFactor;
+          const absDiff = Math.abs(diff);
+          if (absDiff > maxDiff) maxDiff = absDiff;
+        }
+        this.burstEnergy *= Math.pow(0.08, delta);
+        if (this.burstEnergy < 0.005) {
+          this.isBursting = false;
+          this.burstEnergy = 0;
+        }
+        sourceBuffer.set(positions);
       }
 
       // Warp Factor & Audio-Reactive Particle Pulse

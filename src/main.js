@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 10. Futuristic Command Terminal (Ctrl + K)
   const cmdPalette = new CommandPalette(appContext);
   appContext.cmdPalette = cmdPalette;
+  window.SynthetixApp = appContext;
 
   // Header quick trigger for Terminal
   const headerCmdBtn = document.getElementById('header-cmd-btn');
