@@ -52,6 +52,12 @@
       </nav>
 
       <div class="header-actions">
+        <!-- Quantum Protocol Game Trigger Button -->
+        <button id="quantum-protocol-btn" class="hud-pill-btn proto-glow-btn" title="Engage Quantum Decoherence Alignment Protocol">
+          <span class="proto-pulse-icon">◈</span>
+          <span>PROTO: RESONANCE</span>
+        </button>
+
         <!-- Command Palette Trigger Hint -->
         <button id="header-cmd-btn" class="hud-pill-btn cmd-hint-btn" title="Open Command Terminal (Ctrl + K)">
           <span class="cmd-kbd">CTRL + K</span>
@@ -694,6 +700,157 @@
 
       <div class="cmd-footer">
         <span id="cmd-log" class="cmd-log">&gt; SYSTEM READY. 19 PROTOCOLS LOADED.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROTOCOL: QUANTUM RESONANCE FULL-SCREEN PUZZLE HUD -->
+  <div id="quantum-game-overlay" class="quantum-game-overlay">
+    <!-- Top Mission Command Header -->
+    <div class="game-top-bar">
+      <div class="game-mission-info">
+        <div class="game-status-beacon">
+          <span class="beacon-pulse"></span>
+          <span class="beacon-label">PROTOCOL: QUANTUM RESONANCE</span>
+        </div>
+        <h1 class="game-mission-title">STABILIZE DECOHERENT PARTICLE MATRIX</h1>
+        <p class="game-mission-sub">Anomalous multi-dimensional fracture detected. Align gimbal angle, resonance frequency, and quantum phase to achieve 100% Coherence.</p>
+      </div>
+
+      <div class="game-top-meta">
+        <div class="game-stat-chip">
+          <span class="stat-lbl">ELAPSED TIME</span>
+          <span class="stat-val" id="game-timer-val">0.0s</span>
+        </div>
+        <button id="game-abort-btn" class="game-btn-abort" title="Exit to Standard Lab View">
+          <span>ABORT PROTOCOL [ESC]</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Holo Reticle & Coherence Readout -->
+    <div class="game-center-stage">
+      <div class="game-holo-reticle">
+        <div class="reticle-ring ring-outer"></div>
+        <div class="reticle-ring ring-mid"></div>
+        <div class="reticle-ring ring-inner"></div>
+        <div class="reticle-crosshair ch-h"></div>
+        <div class="reticle-crosshair ch-v"></div>
+
+        <div class="coherence-readout-wrap">
+          <div class="coherence-badge">SYSTEM COHERENCE</div>
+          <div class="coherence-num critical" id="game-coherence-val">0.0%</div>
+          <div class="coherence-status" id="game-coherence-status">DECOHERENCE CRITICAL // AXES DRIFTING</div>
+
+          <div class="coherence-meter-container">
+            <div class="coherence-meter-track">
+              <div class="coherence-meter-fill" id="game-coherence-bar" style="width: 0%;"></div>
+            </div>
+            <div class="meter-threshold-marker"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Tactical Control Deck -->
+    <div class="game-deck-bar">
+      <!-- Deck Column 1: 3D Gimbal Drag Zone -->
+      <div class="game-control-card gimbal-card">
+        <div class="card-top-lbl">
+          <span>01 // GIMBAL SPATIAL ALIGNMENT</span>
+          <span class="card-hint">DRAG TO ROTATE AXES</span>
+        </div>
+        <div class="game-trackpad" id="game-trackpad">
+          <div class="trackpad-grid"></div>
+          <div class="trackpad-crosshair"></div>
+          <div class="trackpad-cursor" id="game-trackpad-cursor"></div>
+          <span class="trackpad-prompt">CLICK & DRAG TO REALIGN 3D VECTORS</span>
+        </div>
+      </div>
+
+      <!-- Deck Column 2: Frequency & Phase Modulation Sliders -->
+      <div class="game-control-card tuning-card">
+        <div class="card-top-lbl">
+          <span>02 // HARMONIC RESONANCE TUNER</span>
+          <span class="card-hint">FREQUENCY & PHASE SHIFT</span>
+        </div>
+        <div class="tuning-inputs">
+          <div class="tuning-row">
+            <div class="row-header">
+              <label for="game-freq-slider">OSCILLATION FREQUENCY</label>
+              <span class="row-val" id="game-freq-val">440 Hz</span>
+            </div>
+            <input type="range" id="game-freq-slider" min="200" max="800" value="440" step="1" class="cyber-slider" />
+          </div>
+
+          <div class="tuning-row">
+            <div class="row-header">
+              <label for="game-phase-slider">QUANTUM PHASE ANGLE</label>
+              <span class="row-val" id="game-phase-val">0°</span>
+            </div>
+            <input type="range" id="game-phase-slider" min="-180" max="180" value="0" step="1" class="cyber-slider" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Deck Column 3: Telemetry & Tactical Assistance -->
+      <div class="game-control-card telemetry-card">
+        <div class="card-top-lbl">
+          <span>03 // TACTICAL TELEMETRY</span>
+          <span class="card-hint">ASSIST PROTOCOLS</span>
+        </div>
+        <div class="telemetry-info-grid">
+          <div class="tele-item">
+            <span class="t-lbl">VECTOR ENTROPY</span>
+            <span class="t-val">0.084 Δ</span>
+          </div>
+          <div class="tele-item">
+            <span class="t-lbl">TARGET SHAPE</span>
+            <span class="t-val text-accent">TESSERACT [4D]</span>
+          </div>
+        </div>
+        <button id="game-hint-btn" class="game-assist-btn">
+          <span class="assist-icon">⚡</span>
+          <span>CALIBRATION ASSIST (+40%)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Victory Resolution Modal -->
+    <div id="game-victory-modal" class="game-victory-modal">
+      <div class="victory-card">
+        <div class="victory-glow-hex">
+          <span>✦</span>
+        </div>
+        <span class="victory-kicker">PROTOCOL COMPLETE // 100% COHERENCE ACHIEVED</span>
+        <h2 class="victory-title">QUANTUM SUPERPOSITION LOCKED</h2>
+        <p class="victory-desc">The chaotic decoherence wave has been neutralized. All vector manifolds have crystallized into the secret 5th geometry: <strong>4D Hypercube (Tesseract)</strong>.</p>
+
+        <div class="victory-stats-row">
+          <div class="v-stat">
+            <span class="v-lbl">RESOLUTION TIME</span>
+            <span class="v-num" id="game-victory-time">0.0s</span>
+          </div>
+          <div class="v-stat">
+            <span class="v-lbl">SUPERPOSITION FIDELITY</span>
+            <span class="v-num text-success">99.98%</span>
+          </div>
+          <div class="v-stat">
+            <span class="v-lbl">UNLOCKED FORMATION</span>
+            <span class="v-num text-accent">4D TESSERACT</span>
+          </div>
+        </div>
+
+        <div class="victory-actions">
+          <button id="game-victory-replay" class="btn-primary-3d">
+            <span>REPLAY PROTOCOL</span>
+            <span class="btn-arrow">↻</span>
+          </button>
+          <button id="game-victory-exit" class="btn-glass-3d">
+            <span>EXPLORE 4D LAB</span>
+            <span class="btn-arrow">→</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

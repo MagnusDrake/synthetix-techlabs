@@ -7,6 +7,7 @@ import { DirectorHUD } from './components/DirectorHUD.js';
 import { SandboxLab } from './components/SandboxLab.js';
 import { FaceTracker } from './core/FaceTracker.js';
 import { CommandPalette } from './components/CommandPalette.js';
+import { QuantumProtocolGame } from './components/QuantumProtocolGame.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('⚡ Synthetix TechLabs — 3D Parallax & Spatial Dimension Engine Initializing...');
@@ -44,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sound: soundEngine,
     hud: null,
     cmdPalette: null,
+    game: null,
     faceTracker: null,
 
     async toggleFaceTracking() {
@@ -72,6 +74,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // 10. Futuristic Command Terminal (Ctrl + K)
   const cmdPalette = new CommandPalette(appContext);
   appContext.cmdPalette = cmdPalette;
+
+  // 11. Protocol: Quantum Resonance Interactive Puzzle Game
+  const game = new QuantumProtocolGame(sceneManager, soundEngine, appContext);
+  appContext.game = game;
+
   window.SynthetixApp = appContext;
 
   // Header quick trigger for Terminal

@@ -235,6 +235,84 @@ export class SoundEngine {
     }
   }
 
+  playProximityPing(proximity = 0.5) {
+    if (!this.isEnabled || !this.ctx) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    // Frequency rises from 350 Hz to 1400 Hz as player nears alignment
+    const freq = 350 + Math.pow(Math.max(0, Math.min(1, proximity)), 2) * 1050;
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.12);
+  }
+
+  playCoherencePulse(coherence = 0.5) {
+    if (!this.isEnabled || !this.ctx) return;
+
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    const baseFreq = 220; // A3
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+
+    // At low coherence: dissonant tritone (311 Hz). At high coherence: perfect fifth (330 Hz) or octave (440 Hz).
+    const secondFreq = baseFreq * (1.414 + (1.5 - 1.414) * coherence);
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(secondFreq, this.ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.12 * coherence, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc1.start();
+    osc2.start();
+    osc1.stop(this.ctx.currentTime + 0.35);
+    osc2.stop(this.ctx.currentTime + 0.35);
+  }
+
+  playVictoryFanfare() {
+    if (this.voice && this.voice.isEnabled) {
+      this.voice.speak('Harmonic stabilization verified. Superposition locked. Hypercube synthesized.');
+    }
+
+    if (!this.isEnabled || !this.ctx) return;
+
+    // Arpeggiated C-Major Chord: C4 (261.6), E4 (329.6), G4 (392.0), C5 (523.2), E5 (659.2)
+    const notes = [261.63, 329.63, 392.00, 523.25, 659.25];
+    notes.forEach((freq, idx) => {
+      const time = this.ctx.currentTime + idx * 0.12;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+
+      gain.gain.setValueAtTime(0.2, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.8);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(time);
+      osc.stop(time + 0.85);
+    });
+  }
+
   // Returns normalized audio frequency bands: { bass: 0..1, mid: 0..1, treble: 0..1, average: 0..1 }
   getFrequencyBands() {
     if (!this.analyser || !this.freqData || !this.isEnabled) {

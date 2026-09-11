@@ -69,6 +69,16 @@ export class SceneManager {
     this.isBursting = false;
     this.burstEnergy = 0;
 
+    // Quantum Protocol Game State & Chaotic Wave Injection
+    this.gameProtocol = {
+      isActive: false,
+      coherence: 0.0,
+      chaosFactor: 0.0,
+      currentFreq: 440,
+      rotX: 0,
+      rotY: 0
+    };
+
     this.clock = new THREE.Clock();
     this.init();
   }
@@ -107,7 +117,9 @@ export class SceneManager {
     this.createGyroscopicRings();
     this.createFloatingShards();
     this.createShockwaveMesh();
+    this.createCosmicDustField();
     this.initParticleMorphTargets();
+    this.createFilamentNetwork();
 
     // 6. Window Resize
     window.addEventListener('resize', () => this.onResize());
@@ -130,6 +142,153 @@ export class SceneManager {
     this.shockwave.renderOrder = 999;
     this.shockwave.visible = false;
     this.scene.add(this.shockwave);
+  }
+
+  createParticleGlowTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+    grad.addColorStop(0.2, 'rgba(0, 240, 255, 0.9)');
+    grad.addColorStop(0.5, 'rgba(138, 43, 226, 0.4)');
+    grad.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+
+    // Cross-flare anamorphic laser spike
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(32, 10); ctx.lineTo(32, 54);
+    ctx.moveTo(10, 32); ctx.lineTo(54, 32);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+  }
+
+  createCosmicDustField() {
+    const count = 1200;
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
+    const c1 = new THREE.Color(this.config.themeColors.primary);
+    const c2 = new THREE.Color(this.config.themeColors.secondary);
+
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const r = 25 + Math.random() * 60;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = (Math.random() - 0.5) * Math.PI;
+
+      positions[i3] = r * Math.cos(theta) * Math.cos(phi);
+      positions[i3 + 1] = r * Math.sin(phi);
+      positions[i3 + 2] = r * Math.sin(theta) * Math.cos(phi);
+
+      const col = Math.random() > 0.5 ? c1 : c2;
+      colors[i3] = col.r * 0.6;
+      colors[i3 + 1] = col.g * 0.6;
+      colors[i3 + 2] = col.b * 0.6;
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.1,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.45,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.dustSystem = new THREE.Points(geo, mat);
+    this.scene.add(this.dustSystem);
+  }
+
+  createFilamentNetwork() {
+    const maxLines = 300;
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(maxLines * 2 * 3);
+    const colors = new Float32Array(maxLines * 2 * 3);
+
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.filamentMesh = new THREE.LineSegments(geo, mat);
+    this.scene.add(this.filamentMesh);
+  }
+
+  updateFilaments() {
+    if (!this.filamentMesh || !this.particleGeo) return;
+    const posAttr = this.particleGeo.getAttribute('position');
+    const positions = posAttr.array;
+    const linePosAttr = this.filamentMesh.geometry.getAttribute('position');
+    const linePositions = linePosAttr.array;
+    const lineColAttr = this.filamentMesh.geometry.getAttribute('color');
+    const lineColors = lineColAttr.array;
+
+    const sampleStep = Math.max(1, Math.floor((positions.length / 3) / 100));
+    let lineIdx = 0;
+    const maxLines = 250;
+    const maxDistSq = 12 * 12;
+
+    const colPrimary = new THREE.Color(this.config.themeColors.primary);
+    const colSecondary = new THREE.Color(this.config.themeColors.secondary);
+
+    for (let i = 0; i < positions.length / 3 && lineIdx < maxLines; i += sampleStep) {
+      const i3 = i * 3;
+      const x1 = positions[i3];
+      const y1 = positions[i3 + 1];
+      const z1 = positions[i3 + 2];
+
+      for (let j = i + sampleStep; j < positions.length / 3 && lineIdx < maxLines; j += sampleStep * 2) {
+        const j3 = j * 3;
+        const dx = positions[j3] - x1;
+        const dy = positions[j3 + 1] - y1;
+        const dz = positions[j3 + 2] - z1;
+        const distSq = dx * dx + dy * dy + dz * dz;
+
+        if (distSq < maxDistSq && distSq > 3.0) {
+          const pIdx = lineIdx * 6;
+          linePositions[pIdx] = x1;
+          linePositions[pIdx + 1] = y1;
+          linePositions[pIdx + 2] = z1;
+          linePositions[pIdx + 3] = positions[j3];
+          linePositions[pIdx + 4] = positions[j3 + 1];
+          linePositions[pIdx + 5] = positions[j3 + 2];
+
+          const alpha = 1.0 - Math.sqrt(distSq) / 12;
+          const c = lineIdx % 2 === 0 ? colPrimary : colSecondary;
+          lineColors[pIdx] = c.r * alpha;
+          lineColors[pIdx + 1] = c.g * alpha;
+          lineColors[pIdx + 2] = c.b * alpha;
+          lineColors[pIdx + 3] = c.r * alpha;
+          lineColors[pIdx + 4] = c.g * alpha;
+          lineColors[pIdx + 5] = c.b * alpha;
+
+          lineIdx++;
+        }
+      }
+    }
+
+    this.filamentMesh.geometry.setDrawRange(0, lineIdx * 2);
+    linePosAttr.needsUpdate = true;
+    lineColAttr.needsUpdate = true;
   }
 
   setupLights() {
@@ -356,6 +515,51 @@ export class SceneManager {
       this.targetBuffers.torus[i3 + 2] = (R + r * Math.cos(v)) * Math.sin(u);
     }
 
+    // 5. Target: 4D Hypercube Tesseract (Inner cube, Outer cube, 8 Hyperspatial struts)
+    this.targetBuffers.tesseract = new Float32Array(count * 3);
+    const innerSize = 5.2;
+    const outerSize = 11.8;
+    const corners = [];
+    for (let cx of [-1, 1]) {
+      for (let cy of [-1, 1]) {
+        for (let cz of [-1, 1]) {
+          corners.push({
+            in: new THREE.Vector3(cx * innerSize, cy * innerSize, cz * innerSize),
+            out: new THREE.Vector3(cx * outerSize, cy * outerSize, cz * outerSize)
+          });
+        }
+      }
+    }
+
+    const edges = [];
+    // 8 Connecting 4D Struts
+    for (let c of corners) {
+      edges.push([c.in, c.out]);
+    }
+    // 12 Inner and 12 Outer Cube Edges
+    for (let i = 0; i < 8; i++) {
+      for (let j = i + 1; j < 8; j++) {
+        const cA = corners[i].in;
+        const cB = corners[j].in;
+        const diffs = (cA.x !== cB.x ? 1 : 0) + (cA.y !== cB.y ? 1 : 0) + (cA.z !== cB.z ? 1 : 0);
+        if (diffs === 1) {
+          edges.push([cA, cB]);
+          edges.push([corners[i].out, corners[j].out]);
+        }
+      }
+    }
+
+    for (let i = 0; i < count; i++) {
+      const i3 = i * 3;
+      const edge = edges[i % edges.length];
+      const t = Math.random();
+      const p = new THREE.Vector3().lerpVectors(edge[0], edge[1], t);
+      const fuzz = 0.35;
+      this.targetBuffers.tesseract[i3] = p.x + (Math.random() - 0.5) * fuzz;
+      this.targetBuffers.tesseract[i3 + 1] = p.y + (Math.random() - 0.5) * fuzz;
+      this.targetBuffers.tesseract[i3 + 2] = p.z + (Math.random() - 0.5) * fuzz;
+    }
+
     // Initialize particle geometry with current target
     this.createParticleField(count);
   }
@@ -396,12 +600,15 @@ export class SceneManager {
     this.particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     this.particleGeo.userData = { sourcePositions };
 
+    const glowTex = this.createParticleGlowTexture();
     this.particleMat = new THREE.PointsMaterial({
-      size: 0.16,
+      size: 0.28,
+      map: glowTex,
       vertexColors: true,
       transparent: true,
-      opacity: 0.8,
-      blending: THREE.AdditiveBlending
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
     });
 
     this.particleSystem = new THREE.Points(this.particleGeo, this.particleMat);
@@ -425,7 +632,8 @@ export class SceneManager {
         core: 'Quantum Core Cluster',
         brain: 'Neural Cortex Brain Mesh',
         dna: 'DNA Double Helix Lattice',
-        torus: 'Quantum Torus Singularity'
+        torus: 'Quantum Torus Singularity',
+        tesseract: '4D Hypercube Tesseract Singularity'
       };
       this.soundEngine.voice.speak(`Morphing particle field to ${names[targetName] || targetName}`);
     }
@@ -624,26 +832,42 @@ export class SceneManager {
     const scrollX = Math.sin(this.scroll.current * Math.PI * 2) * 5;
     const scrollY = -this.scroll.current * 10;
 
-    this.camera.position.x = scrollX + mouseOffsetX;
-    this.camera.position.y = scrollY - mouseOffsetY;
-    this.camera.position.z = scrollZ - (this.biometric.z ? (this.biometric.z - 1) * 6 : 0);
+    if (this.gameProtocol.isActive) {
+      this.camera.position.x += (0 - this.camera.position.x) * 0.08;
+      this.camera.position.y += (0 - this.camera.position.y) * 0.08;
+      this.camera.position.z += (22 - this.camera.position.z) * 0.08;
+      this.camera.lookAt(0, 0, 0);
+    } else {
+      this.camera.position.x = scrollX + mouseOffsetX;
+      this.camera.position.y = scrollY - mouseOffsetY;
+      this.camera.position.z = scrollZ - (this.biometric.z ? (this.biometric.z - 1) * 6 : 0);
 
-    // Camera shake recoil from quantum burst
-    if (this.cameraShake > 0.001) {
-      this.camera.position.x += (Math.random() - 0.5) * this.cameraShake;
-      this.camera.position.y += (Math.random() - 0.5) * this.cameraShake;
-      this.camera.position.z += (Math.random() - 0.5) * this.cameraShake;
-      this.cameraShake *= Math.pow(0.04, delta);
-      if (this.cameraShake < 0.001) this.cameraShake = 0;
+      // Camera shake recoil from quantum burst
+      if (this.cameraShake > 0.001) {
+        this.camera.position.x += (Math.random() - 0.5) * this.cameraShake;
+        this.camera.position.y += (Math.random() - 0.5) * this.cameraShake;
+        this.camera.position.z += (Math.random() - 0.5) * this.cameraShake;
+        this.cameraShake *= Math.pow(0.04, delta);
+        if (this.cameraShake < 0.001) this.cameraShake = 0;
+      }
+
+      const lookTarget = new THREE.Vector3(
+        mouseOffsetX * 0.4,
+        scrollY * 0.9 - mouseOffsetY * 0.4,
+        scrollZ - 15
+      );
+      this.camera.lookAt(lookTarget);
+      this.camera.rotation.z = -this.mouse.current.x * 0.06 * pStrength;
     }
 
-    const lookTarget = new THREE.Vector3(
-      mouseOffsetX * 0.4,
-      scrollY * 0.9 - mouseOffsetY * 0.4,
-      scrollZ - 15
-    );
-    this.camera.lookAt(lookTarget);
-    this.camera.rotation.z = -this.mouse.current.x * 0.06 * pStrength;
+    // Cosmic Micro-Dust Orbit
+    if (this.dustSystem) {
+      this.dustSystem.rotation.y += delta * 0.025 * this.timeDilation.rate;
+      this.dustSystem.rotation.x += delta * 0.012 * this.timeDilation.rate;
+    }
+
+    // Dynamic Synaptic Filaments Update
+    this.updateFilaments();
 
     // 3. Audio-Reactive Point Light Modulation & Burst Flash
     this.mousePointLight.position.x = mouseOffsetX * 1.5;
@@ -743,13 +967,18 @@ export class SceneManager {
       }
 
       // Warp Factor & Audio-Reactive Particle Pulse
-      this.warp.factor += (0 - this.warp.factor) * 0.05;
-      const currentWarpSpeed = (1.0 + this.warp.factor + audioFreqs.bass * 2.0) * (this.warp.inverted ? -1 : 1) * this.timeDilation.rate;
-      this.particleSystem.rotation.y += delta * 0.06 * currentWarpSpeed;
+      if (this.gameProtocol.isActive) {
+        this.particleSystem.rotation.x = this.gameProtocol.rotX;
+        this.particleSystem.rotation.y = this.gameProtocol.rotY;
+      } else {
+        this.warp.factor += (0 - this.warp.factor) * 0.05;
+        const currentWarpSpeed = (1.0 + this.warp.factor + audioFreqs.bass * 2.0) * (this.warp.inverted ? -1 : 1) * this.timeDilation.rate;
+        this.particleSystem.rotation.y += delta * 0.06 * currentWarpSpeed;
+      }
 
       // Dynamic Particle Point Size reacting to Treble
       if (this.particleMat) {
-        this.particleMat.size = 0.16 + audioFreqs.treble * 0.22;
+        this.particleMat.size = 0.24 + audioFreqs.treble * 0.22;
       }
 
       // Interactive cursor gravitational deflection
@@ -766,6 +995,20 @@ export class SceneManager {
           const force = (160 - distSq) / 160 * 0.1;
           positions[i3] += dx * force;
           positions[i3 + 1] += dy * force;
+        }
+      }
+
+      // Quantum Protocol Chaotic Wave Perturbation
+      if (this.gameProtocol.isActive && this.gameProtocol.chaosFactor > 0.01) {
+        const chaos = this.gameProtocol.chaosFactor;
+        const freq = (this.gameProtocol.currentFreq || 440) / 100.0;
+        const t = elapsedTime * 3.2;
+        for (let i = 0; i < count; i += 3) {
+          const i3 = i * 3;
+          const wave = Math.sin(t + positions[i3 + 1] * 0.25 * freq) * chaos * 3.5;
+          positions[i3] += Math.sin(t + i) * chaos * 0.25;
+          positions[i3 + 1] += wave * 0.12;
+          positions[i3 + 2] += Math.cos(t + i) * chaos * 0.25;
         }
       }
 
